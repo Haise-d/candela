@@ -1,0 +1,9 @@
+# Build output (build.sh)
+build/
+out/
+dist/
+
+# Binaries are attached to GitHub Releases, never committed
+*.exe
+
+__pycache__/
