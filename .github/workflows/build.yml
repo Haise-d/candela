@@ -1,0 +1,61 @@
+# Builds candela.exe with MinGW-w64 on every push and pull request, runs the
+# logic tests, and keeps the zip as a downloadable artifact of the run.
+# Publishing a GitHub Release also attaches that zip to the release.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write  # attaching the zip to a release
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64
+
+      - name: Build and test
+        run: CXX=x86_64-w64-mingw32-g++-posix sh build.sh
+
+      - name: Check the release tag matches the version
+        if: github.event_name == 'release'
+        run: |
+          code=$(sed -n 's/^#define CANDELA_VERSION L"\(.*\)"/\1/p' src/candela.h)
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$code" != "$tag" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME doesn't match CANDELA_VERSION $code in src/candela.h"
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then version="${GITHUB_REF_NAME#v}"; else version="dev-${GITHUB_SHA::7}"; fi
+          dir="Candela-$version"
+          mkdir -p "dist/$dir"
+          cp out/candela.exe README.md LICENSE THIRD_PARTY_NOTICES.md "dist/$dir/"
+          cp -r theme "dist/$dir/"
+          (cd dist && zip -qr "$dir.zip" "$dir")
+          echo "ZIP=dist/$dir.zip" >> "$GITHUB_ENV"
+          echo "NAME=$dir" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.ZIP }}
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber
