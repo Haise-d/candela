@@ -1,0 +1,11 @@
+# Normalize text files to LF in the repository.
+* text=auto
+
+# build.sh must keep LF endings even when checked out on Windows.
+*.sh text eol=lf
+
+# Binary assets.
+*.ico binary
+*.cur binary
+*.ani binary
+*.png binary
