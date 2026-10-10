@@ -287,6 +287,32 @@ bool ParseCoords(const std::wstring& t, double* a, double* b, bool* pair) {
     return num(s.substr(0, comma), a) && num(s.substr(comma + 1), b);
 }
 
+// A fade's length: "Instant", "0.4 s", "20 s", "5 min".
+std::wstring Duration(int ms) {
+    if (ms <= 0) return Tr(L"Instant", L"即時");
+    std::wstring sec = Tr(L" s", L"秒"), min = Tr(L" min", L"分");
+    if (ms < 60000 && ms % 1000) {
+        wchar_t buf[16];
+        swprintf(buf, 16, L"%.1f", ms / 1000.0);
+        return buf + sec;
+    }
+    int s = ms / 1000;
+    if (s < 60) return std::to_wstring(s) + sec;
+    if (s % 60 == 0) return std::to_wstring(s / 60) + min;
+    return std::to_wstring(s / 60) + min + L" " + std::to_wstring(s % 60) + sec;
+}
+
+// A small title over the rows after it.
+Option Heading(std::wstring label) {
+    Option o;
+    o.key = L"heading:" + label;
+    o.label = label;
+    o.kind = kHeading;
+    o.value = [] { return L""; };
+    o.change = [](int) {};
+    return o;
+}
+
 Option Coordinate(bool latitude) {
     Option o;
     o.key = latitude ? L"lat" : L"lon";
@@ -411,8 +437,37 @@ std::vector<Section> Build() {
     sc.opts.push_back(Coordinate(false));
     out.push_back(sc);
 
-    // ---- Afterglow (red by brightness; "darkroom" in the code and the settings file) ----
-    Section dr{L"darkroom", Tr(L"Afterglow", L"残光"), {}};
+    // ---- warmth: fades, then Afterglow (red by brightness; "darkroom" in the code and the settings file) ----
+    Section dr{L"warmth", Tr(L"Warmth", L"色温度"), {}};
+    dr.opts.push_back(Toggle(L"fade", Tr(L"Fade color changes", L"色の切替をフェード"),
+                             Tr(L"Color changes come on gradually instead of all at once. Scheduled changes (sunset, night, "
+                                L"morning) and the ones you make (hotkeys, the tray menu, these settings) each take their own "
+                                L"time, set below.",
+                                L"報告：色の切替を瞬時ではなく徐々に実行。スケジュールによる切替（日没・夜間・朝）と"
+                                L"手動の操作（ホットキー・トレイメニュー・本設定）で、それぞれ下記の所要時間を適用。"),
+                             &c.fade));
+    {
+        Option o = Steps(L"fadesched", Tr(L"Scheduled fade", L"スケジュール切替の所要時間"),
+                         Tr(L"How long a scheduled change takes: sunset, night and morning. A long fade, like 30 minutes, "
+                            L"drifts in the way the light outside does.",
+                            L"報告：スケジュールによる切替（日没・夜間・朝）の所要時間。"
+                            L"30分など長めに設定すると、外の光のように緩やかに変化。"),
+                         {5, 10, 20, 30, 60, 120, 300, 600, 900, 1800, 3600}, &c.fade_seconds,
+                         [](int v) { return Duration(v * 1000); });
+        o.enabled = [] { return g_cfg.fade; };
+        dr.opts.push_back(o);
+    }
+    {
+        Option o = Steps(L"fadehk", Tr(L"Hotkey fade", L"ホットキー操作の所要時間"),
+                         Tr(L"How long a change you make takes: Warmer, Cooler, Dimmer, Brighter, Afterglow and Warmth off, "
+                            L"from a hotkey, the tray menu or these settings. Instant leaves them as they were.",
+                            L"報告：手動操作による切替の所要時間。対象：暖色・寒色・減光・増光・残光・色温度補正の停止"
+                            L"（ホットキー、トレイメニュー、本設定から）。「即時」で従来通り瞬時に切替。"),
+                         {0, 200, 400, 700, 1000, 1500, 2000, 3000, 5000}, &c.fade_hotkey_ms, Duration);
+        o.enabled = [] { return g_cfg.fade; };
+        dr.opts.push_back(o);
+    }
+    dr.opts.push_back(Heading(Tr(L"Afterglow", L"残光")));
     {
         Option o = Action(L"drnow", Tr(L"Afterglow now", L"残光を起動"),
                           Tr(L"Turns Afterglow on right away, until the next scheduled change. Press again to leave it.",

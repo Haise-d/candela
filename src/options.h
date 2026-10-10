@@ -16,6 +16,7 @@ enum Kind {
     kAction,   // a button
     kInfo,     // text only
     kList,     // a list of .exe names, edited in the side panel
+    kHeading,  // a small title over the rows after it on the same page; never selected
 };
 
 // What the side panel's little popup shows for an option.

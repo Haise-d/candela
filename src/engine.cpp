@@ -55,7 +55,9 @@ namespace engine {
 
 namespace {
 
-enum : UINT_PTR { TIMER_TICK = 1, TIMER_BURST, TIMER_FORCE, TIMER_SAVE, TIMER_GAMES };
+enum : UINT_PTR { TIMER_TICK = 1, TIMER_BURST, TIMER_FORCE, TIMER_SAVE, TIMER_GAMES, TIMER_FADE };
+constexpr int kFadeSteps = 400;  // a fade's ramp steps at most (each one too small to see)
+constexpr int kFadeFilterSteps = 100;  // ...and Windows' color filter's (fewer: each one redraws the screen)
 constexpr double kBurstSeconds = 3.0;
 constexpr int kSurelyWarmK = 3000;  // a color this warm only gets through once warm colors are unlocked
 enum : UINT {
@@ -91,6 +93,25 @@ struct Shown {
 };
 Shown g_shown;
 core::Ramp g_want_ramp = core::IdentityRamp();  // the ramp asked for last
+// What was last put on screen, a fade's step included: where the next fade starts.
+core::Ramp g_cur_ramp = core::IdentityRamp();
+core::Matrix g_cur_matrix = core::IdentityMatrix();
+// A fade under way: the ramp and the color filter going from where they were
+// to the new colors, a step at a time (TIMER_FADE). Its last step puts the new
+// colors on the usual way, with everything that checks them.
+struct Fade {
+    bool active = false;
+    core::Ramp from, to;
+    core::Matrix mfrom, mto;
+    bool filter = false;     // the color filter takes part (it differs at the two ends)
+    int filter_step = -1;    // the filter's step last sent
+    core::Status st;         // what it fades to
+    core::Effect fx;
+    double start = 0, seconds = 0;
+};
+Fade g_fade;
+// Why the colors are being put on: it decides how long they fade.
+enum class Why { kUser, kSchedule, kForce };
 // Warm-color notifications already shown this run: each one once, not every
 // time a warm color is refused again (each evening, each warmth off / on).
 std::set<std::wstring> g_noticed;
@@ -400,6 +421,7 @@ bool UpdateShown() {
 // below the ~3400K Windows allows by default. Not counted when no display took
 // anything (none attached, a screen switched off, quitting).
 void NoteIfWarmWorked(const core::Status& st, int displays_full) {
+    if (g_fade.active) return;  // a fade's step isn't what the status says is on screen
     if (displays_full > 0 && !st.disabled && st.kelvin <= kSurelyWarmK && !sys::WarmColorsWork()) {
         sys::NoteWarmColorWorked();
         Log(L"Warm colors work");
@@ -413,7 +435,7 @@ void NoteIfWarmWorked(const core::Status& st, int displays_full) {
 void ClearAcceptedRefusals() {
     bool changed = false;
     bool was_limited = g_shown.limited;
-    if (UpdateShown()) {
+    if (!g_fade.active && UpdateShown()) {  // mid-fade the step on screen isn't the colors asked for
         g_tip.clear();
         changed = true;
         if (was_limited && !g_shown.limited) {
@@ -501,54 +523,150 @@ core::Status CurrentStatus() {
     return st;
 }
 
-void Tick(bool force = false) {
+// The new colors, all at once, and everything that checks how they went.
+void ApplyNow(const core::Status& st, const core::Ramp& ramp, const core::Effect& fx, bool force) {
+    // Forced (display change, wake-up): put the filter back only if it's in
+    // use. Re-sending "no filter" makes Windows redraw the screen for
+    // nothing, which shows as a flash right when a game leaves fullscreen.
+    bool fx_changes = fx.key != g_filter_on || (force && fx.key != L"identity");
+    // Going warmer: filter first, then the ramp. Going cooler: the reverse.
+    // Either way no frame in between drops green or blue text.
+    bool filter_first = fx.strength >= g_filter_strength;
+    bool fx_ok = true;
+    if (fx_changes && filter_first) fx_ok = colorfx::Set(fx.matrix, fx.key == L"identity");
+    auto res = gamma::Apply(ramp);
+    g_want_ramp = ramp;
+    g_cur_ramp = ramp;
+    if (fx_changes && !filter_first) fx_ok = colorfx::Set(fx.matrix, fx.key == L"identity");
+    if (fx_changes) g_cur_matrix = fx.matrix;
+    g_filter_on = fx.key;
+    g_filter_strength = fx.strength;
+    if (fx.key != L"identity" && !colorfx::Available())
+        g_problems[L"colorfx"] = Tr(L"Windows' color filter isn't available, so Afterglow is red-only.",
+                                    L"警告：Windowsのカラーフィルターが使用不可。残光は赤チャンネルのみ。");
+    else if (!fx_ok)  // the color filter keeps trying again by itself, slowly (cleared in ClearAcceptedRefusals)
+        g_problems[L"colorfx-refused"] = Tr(L"Windows refused the color filter (is Magnifier or a color filter on?).",
+                                            L"警告：Windowsがカラーフィルターを拒否（拡大鏡やカラーフィルターが有効？）。");
+    else if (fx_changes) {
+        g_problems.erase(L"colorfx");
+        g_problems.erase(L"colorfx-refused");
+    }
+    Log(L"Applied %ls (%ls)", core::Describe(st.kelvin).c_str(), st.Summary().c_str());
+    if (UpdateShown()) g_tip.clear();
+    if (g_shown.limited)
+        Log(L"Windows allowed only part of it: about %ls at %d%%", core::Describe(g_shown.kelvin).c_str(),
+            (int)std::nearbyint(g_shown.brightness * 100));
+    if (res.limited.empty()) g_problems.erase(L"limited");
+    if (res.refused.empty()) {
+        g_problems.erase(L"blocked");
+        g_last_failure.reset();
+    }
+    if (!res.limited.empty() || !res.refused.empty()) OnApplyFailed(res);
+    // Well below the ~3400K Windows allows by default, and every display
+    // took it: warm colors are on, whatever else says otherwise.
+    if (res.limited.empty() && res.refused.empty()) NoteIfWarmWorked(st, res.full);
+}
+
+// ---- fades --------------------------------------------------------------------------------------------
+// How long a change fades in: scheduled ones and the ones you make each have
+// their own time. Forced re-applies (a display change, waking up) never fade.
+double FadeSeconds(Why why) {
+    if (!g_cfg.fade || why == Why::kForce) return 0;
+    return why == Why::kSchedule ? g_cfg.fade_seconds : g_cfg.fade_hotkey_ms / 1000.0;
+}
+
+void StopFade() {
+    if (!g_fade.active) return;
+    g_fade.active = false;
+    KillTimer(g_main, TIMER_FADE);
+}
+
+// The fade's end: the new colors go on the usual way, with every check.
+void FinishFade(bool force = false) {
+    if (!g_fade.active) return;
+    StopFade();
+    ApplyNow(g_fade.st, g_fade.to, g_fade.fx, force);
+    UpdateTray(g_status);
+}
+
+// One step of the fade under way. Mid-way, how Windows took each step isn't
+// reported (no balloons, no log); the last step's result is.
+void FadeStep(bool force = false) {
+    if (!g_fade.active) return;
+    double p = (Seconds() - g_fade.start) / g_fade.seconds;
+    if (!(p < 1)) {
+        FinishFade(force);
+        return;
+    }
+    double t = core::FadeCurve(p);
+    if (g_fade.filter) {
+        // Fewer steps for the filter than for the ramp: each one makes Windows redraw.
+        int step = (int)std::nearbyint(t * kFadeFilterSteps);
+        if (step != g_fade.filter_step || force) {
+            g_fade.filter_step = step;
+            g_cur_matrix = core::BlendMatrix(g_fade.mfrom, g_fade.mto, (double)step / kFadeFilterSteps);
+            colorfx::Set(g_cur_matrix, false);
+            g_filter_on = L"fading";  // so the last step sends the real filter, whichever it is
+        }
+    }
+    g_cur_ramp = core::Blend(g_fade.from, g_fade.to, t);
+    g_want_ramp = g_cur_ramp;
+    auto res = gamma::Apply(g_cur_ramp);
+    // Windows held this step back (warm colors still locked) or refused it:
+    // the fade has gone as far as Windows lets it. Finish now, so the closest
+    // ramp Windows takes is worked out once rather than again on every step
+    // (each try is a call to the driver, and a taken try shows on screen).
+    if (!res.limited.empty() || !res.refused.empty()) FinishFade(force);
+}
+
+// From what's on screen now (a fade's step too, so a new change mid-fade
+// carries on smoothly from there) to the new colors.
+void StartFade(const core::Status& st, const core::Ramp& ramp, const core::Effect& fx, double seconds) {
+    // Held back by Windows (warm colors locked): start from what's really on
+    // screen, the part of the way to the last colors that Windows took.
+    gamma::State shown = gamma::GetState();
+    g_fade.from = !g_fade.active && shown.limited > 0 ? core::Blend(core::IdentityRamp(), g_cur_ramp, shown.t) : g_cur_ramp;
+    g_fade.to = ramp;
+    g_fade.mfrom = g_cur_matrix;
+    g_fade.mto = fx.matrix;
+    // The same filter at both ends (dimming in Afterglow, say): left alone,
+    // rather than sent again on every step for nothing.
+    g_fade.filter = colorfx::Available() && memcmp(g_fade.mfrom.m, g_fade.mto.m, sizeof(g_fade.mto.m)) != 0;
+    g_fade.filter_step = -1;
+    g_fade.st = st;
+    g_fade.fx = fx;
+    g_fade.start = Seconds();
+    g_fade.seconds = seconds;
+    g_fade.active = true;
+    if (seconds >= 5) Log(L"Fading to %ls over %d s", core::Describe(st.kelvin).c_str(), (int)std::nearbyint(seconds));
+    SetTimer(g_main, TIMER_FADE, std::clamp((int)(seconds * 1000 / kFadeSteps), 16, 1000), nullptr);
+}
+
+void Tick(Why why = Why::kUser) {
     if (g_shut) return;  // quitting: normal colors stay
+    bool force = why == Why::kForce;
     core::Status st = CurrentStatus();
     g_status = st;
     bool darkroom = st.kelvin <= core::kDarkroom;
     core::Effect fx = core::EffectFor(st.kelvin, g_cfg.darkroom_by_brightness);
     Applied want{st.kelvin, st.brightness, fx.key, darkroom, g_cfg.darkroom_brightness, g_cfg.darkroom_invert};
-    if (force || !g_applied || !(want == *g_applied)) {
+    if (!g_applied || !(want == *g_applied)) {
         core::Ramp ramp = core::BuildRamp(st.kelvin, g_cfg.darkroom_brightness, g_cfg.darkroom_invert, st.brightness);
-        // Forced (display change, wake-up): put the filter back only if it's in
-        // use. Re-sending "no filter" makes Windows redraw the screen for
-        // nothing, which shows as a flash right when a game leaves fullscreen.
-        bool fx_changes = fx.key != g_filter_on || (force && fx.key != L"identity");
-        // Going warmer: filter first, then the ramp. Going cooler: the reverse.
-        // Either way no frame in between drops green or blue text.
-        bool filter_first = fx.strength >= g_filter_strength;
-        bool fx_ok = true;
-        if (fx_changes && filter_first) fx_ok = colorfx::Set(fx.matrix, fx.key == L"identity");
-        auto res = gamma::Apply(ramp);
-        g_want_ramp = ramp;
-        if (fx_changes && !filter_first) fx_ok = colorfx::Set(fx.matrix, fx.key == L"identity");
-        g_filter_on = fx.key;
-        g_filter_strength = fx.strength;
-        if (fx.key != L"identity" && !colorfx::Available())
-            g_problems[L"colorfx"] = Tr(L"Windows' color filter isn't available, so Afterglow is red-only.",
-                                        L"警告：Windowsのカラーフィルターが使用不可。残光は赤チャンネルのみ。");
-        else if (!fx_ok)  // the color filter keeps trying again by itself, slowly (cleared in ClearAcceptedRefusals)
-            g_problems[L"colorfx-refused"] = Tr(L"Windows refused the color filter (is Magnifier or a color filter on?).",
-                                                L"警告：Windowsがカラーフィルターを拒否（拡大鏡やカラーフィルターが有効？）。");
-        else if (fx_changes) {
-            g_problems.erase(L"colorfx");
-            g_problems.erase(L"colorfx-refused");
+        double seconds = g_applied ? FadeSeconds(why) : 0;  // the first colors at start-up go straight on
+        // To or from inverted Afterglow, half way would be a flat screen: straight on.
+        if (!core::Approachable(ramp) || !core::Approachable(g_cur_ramp)) seconds = 0;
+        if (seconds > 0) {
+            StartFade(st, ramp, fx, seconds);
+        } else {
+            StopFade();
+            ApplyNow(st, ramp, fx, force);
         }
         g_applied = want;
-        Log(L"Applied %ls (%ls)", core::Describe(st.kelvin).c_str(), st.Summary().c_str());
-        if (UpdateShown()) g_tip.clear();
-        if (g_shown.limited)
-            Log(L"Windows allowed only part of it: about %ls at %d%%", core::Describe(g_shown.kelvin).c_str(),
-                (int)std::nearbyint(g_shown.brightness * 100));
-        if (res.limited.empty()) g_problems.erase(L"limited");
-        if (res.refused.empty()) {
-            g_problems.erase(L"blocked");
-            g_last_failure.reset();
-        }
-        if (!res.limited.empty() || !res.refused.empty()) OnApplyFailed(res);
-        // Well below the ~3400K Windows allows by default, and every display
-        // took it: warm colors are on, whatever else says otherwise.
-        if (res.limited.empty() && res.refused.empty()) NoteIfWarmWorked(st, res.full);
+    } else if (force) {
+        // A display change or waking up, nothing new to show: put the colors
+        // back as they are, a fade under way included.
+        if (g_fade.active) FadeStep(true);
+        else ApplyNow(st, core::BuildRamp(st.kelvin, g_cfg.darkroom_brightness, g_cfg.darkroom_invert, st.brightness), fx, true);
     } else {
         CheckAll();
     }
@@ -761,6 +879,7 @@ void DoShutdown() {
     KillTimer(g_main, TIMER_SAVE);
     if (ConfigDirty()) SaveConfigNow();  // only what you changed; hand edits are never overwritten
     keyboard::Stop();
+    StopFade();
     gamma::StopFastWatch();
     colorfx::Close();
     gamma::Apply(core::IdentityRamp());
@@ -792,6 +911,12 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 CheckGames();
                 return 0;
             }
+            if (wp == TIMER_FADE) {
+                bool fading = g_fade.active;
+                FadeStep();
+                if (fading && !g_fade.active) settings::Refresh();  // done: the settings show how it went
+                return 0;
+            }
             if (wp == TIMER_BURST && Seconds() > g_burst_until) KillTimer(h, TIMER_BURST);
             if (wp == TIMER_FORCE) {
                 gamma::CheckAndRepair(0.001);
@@ -818,10 +943,12 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     if (HotkeysChanged()) RegisterHotkeys();
                     KeyboardSettingsChanged();
                     if (look() != looked) StyleChanged();
+                    if (!g_cfg.fade) FinishFade();  // fades just turned off: the one under way ends now
+                    Tick(Why::kUser);  // a hand edit counts as a change you made
                     settings::Refresh();
                 }
             }
-            Tick();
+            Tick(Why::kSchedule);
             return 0;
         case WM_QUERYENDSESSION: return TRUE;
         case WM_ENDSESSION:
@@ -857,7 +984,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             // these may put colors back.
             if (g_shut) return 0;
             g_ctl.ForgetTimeline();
-            Tick();
+            Tick(Why::kSchedule);
             settings::Refresh();
             return 0;
         case WM_DISPLAYCHANGE:
@@ -865,7 +992,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             Log(L"Display configuration changed");
             blackout::Clear();  // screens moved; don't leave black windows in odd places
             gamma::RefreshDisplays();
-            Tick(true);
+            Tick(Why::kForce);
             StartBurst();
             return 0;
         case WM_POWERBROADCAST:
@@ -873,7 +1000,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 Log(L"Resumed from sleep");
                 keyboard::Reinstall();
                 gamma::RefreshDisplays();
-                Tick(true);
+                Tick(Why::kForce);
                 StartBurst();
             }
             return TRUE;
@@ -882,7 +1009,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             // a remote desktop: the hook may have been dropped meanwhile.
             if (!g_shut && (wp == WTS_SESSION_UNLOCK || wp == WTS_CONSOLE_CONNECT || wp == WTS_REMOTE_CONNECT)) {
                 keyboard::Reinstall();
-                Tick(true);
+                Tick(Why::kForce);
                 StartBurst();
             }
             return 0;
@@ -934,7 +1061,7 @@ bool Init() {
     if (IsUserWindow(GetForegroundWindow())) g_last_user_fg = GetForegroundWindow();
     AddTrayIcon();
     CheckRegistry();
-    Tick(true);
+    Tick(Why::kForce);
     SetTickTimer();
     keyboard::Start();
     CheckGames();
@@ -987,6 +1114,7 @@ void Wake() {
     SetTickTimer();
     CheckRegistry();
     if (HotkeysChanged()) RegisterHotkeys();
+    if (!g_cfg.fade) FinishFade();  // fades just turned off: the one under way ends now
     Tick();
     SaveConfigSoon();
 }

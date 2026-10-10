@@ -97,6 +97,30 @@ static void ColorTests() {
     CHECK(apply(red, 0.3, 0.85, 0.4, 0) > 0.6);
     CHECK(apply(red, 0.3, 0.85, 0.4, 1) == 0 && apply(red, 0.3, 0.85, 0.4, 2) == 0);
     CHECK(Describe(800) == L"Afterglow" && Describe(2000) == L"2000K");
+
+    // Fades: the filter part of the way, and the curve.
+    Matrix id = IdentityMatrix();
+    CHECK(!memcmp(BlendMatrix(id, red, 0).m, id.m, sizeof(id.m)));
+    CHECK(!memcmp(BlendMatrix(id, red, 1).m, red.m, sizeof(red.m)));
+    CHECK(!memcmp(BlendMatrix(id, red, 7).m, red.m, sizeof(red.m)));  // clamped
+    Matrix midway = BlendMatrix(id, red, 0.5);
+    CHECK(std::abs(midway.m[0] - (1 + 0.299f) / 2) < 1e-6 && std::abs(midway.m[6] - 0.5) < 1e-6);
+    // Half way to Afterglow, green text still shows (as green and as red).
+    CHECK(apply(midway, 0.3, 0.85, 0.4, 1) > 0.4 && apply(midway, 0.3, 0.85, 0.4, 0) > 0.4);
+    CHECK(FadeCurve(0) == 0 && FadeCurve(1) == 1 && FadeCurve(0.5) == 0.5);
+    // Inverted Afterglow doesn't fade (half way is a flat screen); the rest does.
+    CHECK(!Approachable(BuildRamp(kDarkroom, 1.0, true)) && Approachable(BuildRamp(kDarkroom)) &&
+          Approachable(BuildRamp(2000, 1.0, false, 0.3)) && Approachable(IdentityRamp()));
+    CHECK(FadeCurve(-1) == 0 && FadeCurve(2) == 1);
+    CHECK(FadeCurve(0.1) < 0.1 && FadeCurve(0.9) > 0.9);  // eased at both ends
+    double prev = 0;
+    bool rising = true;
+    for (int i = 1; i <= 100; i++) {
+        double v = FadeCurve(i / 100.0);
+        rising = rising && v >= prev;
+        prev = v;
+    }
+    CHECK(rising);
 }
 
 static int K(const Config& cfg, const char* at, Controller* ctl = nullptr) {
@@ -331,6 +355,16 @@ static void ListTests() {
     std::map<std::string, std::string> old_unknown;
     CHECK(ParseConfig(R"({"app_icon": "x", "icon_entry_hidden": true, "day_kelvin": 5000})", &old, &old_unknown));
     CHECK(old.day_kelvin == 5000 && old_unknown.size() == 2);
+
+    // Fades: off by default (an older file reads as before), and kept on a save.
+    CHECK(!old.fade && old.fade_seconds == 20 && old.fade_hotkey_ms == 400);
+    Config f;
+    f.fade = true;
+    f.fade_seconds = 1800;
+    f.fade_hotkey_ms = 0;
+    Config fback;
+    CHECK(ParseConfig(SerializeConfig(f, none), &fback, nullptr));
+    CHECK(fback.fade && fback.fade_seconds == 1800 && fback.fade_hotkey_ms == 0);
 }
 
 // The two popups' corners and the new-song popup.

@@ -106,6 +106,11 @@ struct Effect {
     Matrix matrix;
 };
 Effect EffectFor(int kelvin, bool by_brightness);
+// For fades: part of the way from one filter to another (t = 0: from, 1: to).
+Matrix BlendMatrix(const Matrix& from, const Matrix& to, double t);
+// How far along a fade looks at a point in its time (0..1 -> 0..1): eased
+// at both ends, so it neither starts nor stops with a jolt.
+double FadeCurve(double progress);
 
 // ---- settings ---------------------------------------------------------------------------------
 // Where a new install starts (Greenwich) until you set your own town; on the
@@ -128,6 +133,12 @@ struct Config {
     std::wstring morning_mode = L"sunrise";  // "sunrise" or "fixed"
     std::wstring morning_time = L"08:00";
     int warmth_step_k = 100;
+    // Fades: color changes come on gradually rather than at once. Scheduled
+    // changes (sunset, night, morning) take fade_seconds; the ones you make
+    // (hotkeys, the tray menu, the settings) take fade_hotkey_ms (0 = instant).
+    bool fade = false;
+    int fade_seconds = 20;
+    int fade_hotkey_ms = 400;
     bool show_popup = true;
     std::wstring hotkey_warmer = L"Alt+Shift+PageDown";
     std::wstring hotkey_cooler = L"Alt+Shift+PageUp";

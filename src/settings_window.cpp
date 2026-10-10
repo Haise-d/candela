@@ -95,6 +95,7 @@ public:
                     sel_ = r;
                 }
         }
+        sel_ = Selectable(sel_, 1);
     }
 
     void Close(bool animate) override {
@@ -203,7 +204,7 @@ private:
     void Rebuild() {
         secs_ = opts::Build();
         cat_ = std::clamp(cat_, 0, (int)secs_.size() - 1);
-        sel_ = std::clamp(sel_, 0, (int)Cat().opts.size() - 1);
+        sel_ = Selectable(sel_, 1);
     }
 
     const opts::Section& Cat() const { return secs_[cat_]; }
@@ -696,6 +697,16 @@ private:
             const opts::Option& o = cat.opts[i];
             bool on = i == sel, enabled = o.enabled();
             float y0 = P(kBodyY + i * (kRowH + kRowGap)), y1 = y0 + P(kRowH);
+            if (o.kind == opts::kHeading) {
+                // A small title sitting low in its row, close to the rows it's over, and a rule to the edge.
+                TextStyle ts{P(11), DWRITE_FONT_WEIGHT_SEMI_BOLD, P(4)};
+                std::wstring t = Upper(o.Label());
+                float ty0 = y1 - P(24), tx1 = P(kRowX0) + TextWidth(t, ts);
+                Text(rt, win_, t, D2D1::RectF(P(kRowX0), ty0, P(kRowX1), y1), ts, C(g_pal.ink_soft));
+                float ry = ty0 + P(12);
+                Fill(rt, win_, std::min(tx1 + P(12), P(kRowX1)), ry, P(kRowX1), ry + Px(), C(g_pal.ink_soft, 0.6f));
+                continue;
+            }
             D2D1_COLOR_F bg = C(g_pal.paper_dark);
             if (on) {
                 double rs = st.enabled ? glitch::Steps((now - t_sel_) / 60.0, 3) : 1.0;
@@ -725,8 +736,10 @@ private:
         float px0 = P(kPanX0), px1 = P(kPanX1), by0 = P(kBodyY), by1 = P(kBodyY1);
         Frame(rt, win_, px0, by0, px1, by1, px, C(g_pal.ink));
         Brackets(rt, px0, by0, px1, by1, C(g_pal.ink));
+        int number = 0;  // headings aren't counted
+        for (int r = 0; r <= sel; r++) number += cat.opts[r].kind != opts::kHeading;
         wchar_t num[64];
-        swprintf(num, 64, L"%ls / %02d", Upper(cat.label).c_str(), sel + 1);
+        swprintf(num, 64, L"%ls / %02d", Upper(cat.label).c_str(), number);
         Text(rt, win_, num, D2D1::RectF(px0 + P(22), by0 + P(18), px1 - P(22), by0 + P(36)), {P(11), DWRITE_FONT_WEIGHT_NORMAL, P(4)},
              C(g_pal.ink_soft));
         double ps = (now - t_sel_) / 220.0;
@@ -997,8 +1010,20 @@ private:
             Render(now);
     }
 
+    // The row to land on when going to `i`: a heading passes the selection on
+    // to the next row in the direction of travel (or back, at the page's end).
+    int Selectable(int i, int dir) const {
+        int n = (int)Cat().opts.size();
+        i = std::clamp(i, 0, n - 1);
+        if (dir == 0) dir = 1;
+        for (int d : {dir, -dir})
+            for (int k = i; k >= 0 && k < n; k += d)
+                if (Cat().opts[k].kind != opts::kHeading) return k;
+        return i;
+    }
+
     void Select(int i, double now, bool render = true) {
-        i = std::clamp(i, 0, (int)Cat().opts.size() - 1);
+        i = Selectable(i, i < sel_ ? -1 : 1);
         if (i == sel_) return;
         opts::EndEdit(EditingOption(), true);
         opts::StopRecording();
@@ -1014,7 +1039,7 @@ private:
         opts::EndEdit(EditingOption(), true);
         opts::StopRecording();
         cat_ = i;
-        sel_ = 0;
+        sel_ = Selectable(0, 1);
         t_tab_ = t_sel_ = t_preview_ = now;
         Render(now);
     }
@@ -1046,6 +1071,7 @@ private:
                 else opts::BeginRecording(o);
                 break;
             case opts::kInfo:
+            case opts::kHeading:
             case opts::kList: break;
             case opts::kAction:
                 if (dir > 0) {

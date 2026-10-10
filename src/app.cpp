@@ -132,6 +132,8 @@ static void Clamp(core::Config& c) {
     clampi(c.night_kelvin, core::kMinK, core::kMaxK);
     clampi(c.sunset_offset_min, -240, 240);
     clampi(c.warmth_step_k, 10, 2000);
+    clampi(c.fade_seconds, 1, 7200);
+    clampi(c.fade_hotkey_ms, 0, 10000);
     clampi(c.borderless_overhang_px, 0, 8);
     clampi(c.watchdog_ms, 20, 5000);
     clampi(c.burst_ms, 10, 1000);

@@ -59,7 +59,7 @@
 #define CANDELA_MUTEX L"Local\\CandelaSingleInstance"
 #define CANDELA_MAIN_CLASS L"CandelaMain"
 #define CANDELA_NAME L"Candela"               // message boxes
-#define CANDELA_VERSION L"1.0.0"
+#define CANDELA_VERSION L"1.1.0"
 
 // Messages posted to the main window.
 enum : UINT {

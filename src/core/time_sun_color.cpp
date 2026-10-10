@@ -324,4 +324,17 @@ Effect EffectFor(int kelvin, bool by_brightness) {
     return {key, t, TowardGray((float)t)};
 }
 
+Matrix BlendMatrix(const Matrix& from, const Matrix& to, double t) {
+    t = std::clamp(t, 0.0, 1.0);
+    Matrix out = {};
+    // Weighted, not from + (to - from) * t: this one lands exactly on `to` at t = 1.
+    for (int i = 0; i < 25; i++) out.m[i] = (float)(from.m[i] * (1 - t) + to.m[i] * t);
+    return out;
+}
+
+double FadeCurve(double progress) {
+    double p = std::clamp(progress, 0.0, 1.0);
+    return p * p * (3 - 2 * p);  // smoothstep
+}
+
 }  // namespace core

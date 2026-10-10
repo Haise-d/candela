@@ -29,6 +29,7 @@ Only want the warmth? **[Candela mini](https://github.com/Haise-d/candela-mini)*
 
 - **Warmth on a schedule.** A day color, a warmer one from sunset, and at night either a warmer color still or **Afterglow**. Sunrise and sunset are worked out on your PC from your town's coordinates, with Windows' own daylight saving.
 - **Afterglow.** The whole screen in red, by brightness: the gentlest light for a dark room. Text in any color stays readable, because every pixel becomes a red of its own brightness.
+- **Fades, if you like.** Turn on **Fade color changes** and sunset, night and morning drift in over the time you choose (5 seconds to an hour), while hotkey changes get a short fade of their own (or none).
 - **It stays warm.** Games and graphics drivers sometimes reset the screen's colors. Candela notices within a tenth of a second and puts them back.
 - **Hotkeys.** Warmer, cooler, dimmer, brighter, Afterglow, warmth off for a film, and two window tools: make a window borderless, and black out every screen but the one you're using.
 - **Alt+Tab, reworked.** A list of your windows with a live preview of the selected one. Close windows right from the list, and keep the switcher on one screen if you like.
@@ -54,7 +55,7 @@ The settings window shows today's schedule across the top, each part in the colo
 | Page | What's there |
 |---|---|
 | **Schedule** | Day and evening colors, a sunset offset, when night starts, Afterglow or a color at night, when the day starts (sunrise or a fixed time), your coordinates |
-| **Afterglow** | Afterglow now, its brightness, keep all text readable, invert (for a real photographic darkroom) |
+| **Warmth** | Fade color changes, how long scheduled and hotkey fades take; then Afterglow now, its brightness, keep all text readable, invert (for a real photographic darkroom) |
 | **Hotkeys** | Every hotkey, how far warmer and cooler move, whether a blackout covers every window |
 | **Switcher** | Alt+Tab on or off, dim the screen behind, which screen it opens on, the quick-switch delay, names typing in, icon colors, exclusive-fullscreen games |
 | **Popups** | The warmth popup and the volume and media popup, the new song popup and which apps it follows, album covers, the volume step, each popup's corner, buttons to try them |
@@ -125,6 +126,12 @@ HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM   GdiIcmGammaRange = 256 (
 
 Until the restart, a temporary key `HKLM\SOFTWARE\Candela warm colors pending` remembers that one is still needed. It's kept in memory only, so Windows removes it by itself at the restart.
 
+### Fades
+
+With **Warmth → Fade color changes** on, the screen moves to new colors gradually: scheduled changes take the **Scheduled fade** time (20 seconds unless you change it; up to an hour), and changes you make (hotkeys, the tray menu, the settings) take the **Hotkey fade** time (0.4 seconds; **Instant** turns it off for them). Pressing a hotkey again mid-fade carries on from wherever the screen is. Starting Candela, waking the PC and plugging in a screen put the colors on straight away.
+
+While warm colors are still locked (see above), a fade stops where Windows does, at about 3400K. Inverted Afterglow is the one change that never fades: half way there the screen would be a flat red, so it switches at once.
+
 ### Start with Windows
 
 Windows keeps ordinary apps away from admin windows such as Task Manager and installers, so Alt+Tab only works over those if Candela runs as admin. **Start with Windows** registers a scheduled task that starts it as admin when you sign in; Windows asks once, when you turn it on.
@@ -190,7 +197,7 @@ sudo apt install g++-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64   # Ubuntu
 CXX=x86_64-w64-mingw32-g++-posix ./build.sh                             # writes out/candela.exe
 ```
 
-`build.sh` also runs the logic tests in `tests/` when a native `g++` is available. Every push is built by GitHub Actions, and publishing a release attaches `Candela-<version>.zip` to it; the release tag must match `CANDELA_VERSION` in `src/candela.h` (tag `v1.0.0` for 1.0.0).
+`build.sh` also runs the logic tests in `tests/` when a native `g++` is available. Every push is built by GitHub Actions, and publishing a release attaches `Candela-<version>.zip` to it; the release tag must match `CANDELA_VERSION` in `src/candela.h` (tag `v1.1.0` for 1.1.0).
 
 | Folder | Contents |
 |---|---|
