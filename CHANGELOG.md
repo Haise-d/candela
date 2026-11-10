@@ -10,6 +10,7 @@ What's new in each version of Candela. Downloads are on the [releases page](http
 - The Games page now follows the app in front while the settings are open: switch to a game and back, and **+ Add** offers it.
 - `candela.log` now says which app Candela took as the one you're using, and why it passed over a window.
 - Adding a running game to **Games → Anti-cheat games**, or taking it off the list, could crash Candela: the settings were rebuilt in the middle of the click.
+- A quick **Alt+Tab** did nothing while an always-on-top window was open (a pinned video, Task Manager kept on top): the switcher picked the window you were already in. It now steps from the window in front, and from the desktop it goes to the window you last used.
 
 ## 1.1.0 — 2026-10-10
 

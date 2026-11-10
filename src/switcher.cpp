@@ -956,7 +956,16 @@ void OnSwitch(int dir) {
         Enumerate();
         FitRowsToScreen();
         int n = (int)g_items.size();
-        g_sel = n > 1 ? (dir > 0 ? 1 : n - 1) : 0;
+        // One step from the window in front, wherever it is in the list:
+        // always-on-top windows are listed first without being the one in
+        // use, and "the second in the list" would then be the window you are
+        // already in. With none of them in front (the desktop, the taskbar),
+        // the first is the one you last used.
+        int front = -1;
+        HWND fg = GetForegroundWindow();
+        for (int i = 0; i < n && front < 0; i++)
+            if (g_items[i].hwnd == fg || (fg && g_items[i].hwnd == GetAncestor(fg, GA_ROOTOWNER))) front = i;
+        g_sel = n < 2 ? 0 : front < 0 ? (dir > 0 ? 0 : n - 1) : ((front + dir) % n + n) % n;
         g_prev_sel = g_sel;
         g_t_sel = -1e9;
         g_first = 0;
