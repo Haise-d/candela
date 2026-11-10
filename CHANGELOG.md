@@ -13,6 +13,7 @@ What's new in each version of Candela. Downloads are on the [releases page](http
 - A quick **Alt+Tab** did nothing while an always-on-top window was open (a pinned video, Task Manager kept on top): the switcher picked the window you were already in. It now steps from the window in front, and from the desktop it goes to the window you last used.
 - `candela.exe --dump` (developer screenshots) no longer replaces your settings file with its sample settings.
 - Candela no longer starts while Candela mini is running, as mini already did the other way round: the two would fight over the colors and the hotkeys. It says so and asks you to quit mini first.
+- With an admin window in front (Task Manager) and Candela not running as admin, Windows' own Alt+Tab opens, and a second Tab then opened Candela's switcher behind it, so neither worked. An Alt+Tab that Windows started now stays with Windows until Alt is let go. The same goes for one started over a game in exclusive fullscreen.
 
 ## 1.1.0 — 2026-10-10
 

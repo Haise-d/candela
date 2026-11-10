@@ -45,6 +45,15 @@ static void MaskAlt() {
 
 static bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
+// An Alt+Tab that Windows started is Windows' until Alt is let go. Two ways it
+// starts there: a game in exclusive fullscreen is in front, or an admin window
+// is (Task Manager) and Candela isn't admin, so Windows shows this hook neither
+// Alt nor the first Tab. Either way Windows' own switcher then comes to the
+// front, it is an ordinary window, and the next Tab would land here and open
+// Candela's switcher behind it. Both are only touched on the hook's thread.
+static bool g_alt_seen = false;          // this hook saw Alt go down
+static bool g_windows_switching = false;  // a Tab of this Alt+Tab went to Windows
+
 static LRESULT CALLBACK Proc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION) return CallNextHookEx(g_hook, code, wp, lp);
     auto* k = (KBDLLHOOKSTRUCT*)lp;
@@ -53,7 +62,11 @@ static LRESULT CALLBACK Proc(int code, WPARAM wp, LPARAM lp) {
     const DWORD vk = k->vkCode;
 
     if (vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU) {
-        if (!down && switcher_active.exchange(false)) PostMessageW(g_main, WM_CANDELA_SW_COMMIT, 0, 0);
+        g_alt_seen = down;
+        if (!down) {
+            g_windows_switching = false;
+            if (switcher_active.exchange(false)) PostMessageW(g_main, WM_CANDELA_SW_COMMIT, 0, 0);
+        }
         return CallNextHookEx(g_hook, code, wp, lp);
     }
 
@@ -64,8 +77,13 @@ static LRESULT CALLBACK Proc(int code, WPARAM wp, LPARAM lp) {
         if (vk == VK_TAB && alt && !Down(VK_CONTROL) && !Down(VK_LWIN) && !Down(VK_RWIN)) {
             const bool active = switcher_active.load();
             // Exclusive-fullscreen games: nothing can draw over them, so let
-            // Windows switch (unless the settings say otherwise).
-            if (!active && g_fg_exclusive && !exclusive_on) return CallNextHookEx(g_hook, code, wp, lp);
+            // Windows switch (unless the settings say otherwise). And once
+            // Windows has this Alt+Tab, or began it out of this hook's sight,
+            // every Tab of it is Windows'.
+            if (!active && (g_windows_switching || !g_alt_seen || (g_fg_exclusive && !exclusive_on))) {
+                g_windows_switching = true;
+                return CallNextHookEx(g_hook, code, wp, lp);
+            }
             if (down) {
                 if (!active) {
                     switcher_active = true;
@@ -100,6 +118,7 @@ static void Install() {
         g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, Proc, GetModuleHandleW(nullptr), 0);
         if (!g_hook) Log(L"Keyboard hook failed (error %lu)", GetLastError());
         else Log(L"Keyboard hook on");
+        g_alt_seen = g_windows_switching = false;  // an Alt already held went down unseen
     }
 }
 
