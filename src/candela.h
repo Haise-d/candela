@@ -92,6 +92,7 @@ bool LoadConfig(bool reload = false);  // reload: a hand edit with a mistake cha
 bool FirstRun();                       // no config.json existed at start-up
 void SaveConfigSoon();                 // after a short pause (dragging a slider saves once)
 void SaveConfigNow();
+extern bool g_never_save;               // --dump: its made-up settings never reach config.json
 void MarkConfigDirty();
 bool ConfigDirty();                    // changed in Candela, not saved yet
 bool ConfigFileChanged();              // config.json was edited by hand since we read or wrote it

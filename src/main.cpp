@@ -266,6 +266,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         LoadConfig();
     } else {
         g_cfg = core::Config();  // --dump: the defaults, whatever this PC has, in Madrid
+        g_never_save = true;     // ...and they stay out of config.json
         g_cfg.latitude = 40.4168;
         g_cfg.longitude = -3.7038;
         g_cfg.games = L"eldenring.exe, cs2.exe";

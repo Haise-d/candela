@@ -222,7 +222,13 @@ bool ConfigFileChanged() {
     return CompareFileTime(&t, &g_file_time) != 0;
 }
 
+bool g_never_save = false;
+
 void SaveConfigNow() {
+    if (g_never_save) {  // --dump draws with made-up settings (Madrid, sample games): yours stay as they are
+        g_dirty = false;
+        return;
+    }
     // Only a write that worked clears these: a failed one stays "not saved yet"
     // and is tried again (engine.cpp, and at exit).
     bool was_read_failed = g_read_failed;
