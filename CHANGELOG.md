@@ -2,6 +2,14 @@
 
 What's new in each version of Candela. Downloads are on the [releases page](https://github.com/Haise-d/candela/releases).
 
+## Unreleased
+
+### Fixed
+
+- **Games → No popups over → + Add** could stay on "Open the game, then come back here" with a game running. Candela now remembers the app's name instead of its window, skips overlays (mouse, GPU and launcher pop-ups) and Windows' own windows so they can't replace the game, and checks again every 2 seconds in case a switch was missed.
+- The Games page now follows the app in front while the settings are open: switch to a game and back, and **+ Add** offers it.
+- `candela.log` now says which app Candela took as the one you're using, and why it passed over a window.
+
 ## 1.1.0 — 2026-10-10
 
 ### New

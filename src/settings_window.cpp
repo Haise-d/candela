@@ -55,9 +55,8 @@ class SettingsWindow : public Window {
 public:
     void Open(const POINT* center) override {
         if (!EnsureWindow()) return;
-        HWND front = LastUserForeground();
-        front_ = front ? ProcessExeName(front) : L"";
-        if (!_wcsicmp(front_.c_str(), L"explorer.exe")) front_.clear();
+        front_ = LastUserApp();
+        Log(L"Settings opened; app you were using: %ls", front_.empty() ? L"none recorded" : front_.c_str());
         Rebuild();
         double now = NowMs();
         if (open_ && !closing_) {
@@ -125,6 +124,7 @@ public:
     void Refresh() override {
         if (!open_) return;
         strip_tz_++;  // the band is worked out again too (a clock change lands here)
+        front_ = LastUserApp();  // you may have switched to a game and back while it was open
         Rebuild();
         Render(NowMs());
     }

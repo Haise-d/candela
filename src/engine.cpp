@@ -48,8 +48,12 @@ std::wstring HotkeyName(HotkeyId id) {
     return L"";
 }
 
-static HWND g_last_user_fg = nullptr;  // the last window you used that isn't Candela's (for "Mark as a game")
-HWND LastUserForeground() { return g_last_user_fg && IsWindow(g_last_user_fg) ? g_last_user_fg : nullptr; }
+// The exe of the last app you used ("balatro.exe"), for "Mark as a game" and the
+// Games page's "+ Add". Kept as a name rather than a window, so it survives the
+// window closing, and only replaced by a window that is clearly an app (see
+// engine::RememberForeground).
+static std::wstring g_last_user_exe;
+std::wstring LastUserApp() { return g_last_user_exe; }
 
 namespace engine {
 
@@ -785,8 +789,7 @@ void ShowMenu() {
     AppendMenuW(m, MF_POPUP, (UINT_PTR)anim, Tr(L"Animation", L"演出").c_str());
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Games.
-    HWND last = LastUserForeground();
-    std::wstring game = last ? ProcessExeName(last) : L"";
+    std::wstring game = LastUserApp();
     std::wstring mark = game.empty() ? Tr(L"Mark the app in front as a game", L"前面のアプリをゲームとして登録")
                                      : Japanese() ? game + L" の上に通知を出さない" : L"No popups over " + game;
     AppendMenuW(m, MF_STRING | (game.empty() ? MF_GRAYED : 0) | (IsGame(game) ? MF_CHECKED | MF_GRAYED : 0), MENU_GAME, mark.c_str());
@@ -860,6 +863,50 @@ bool IsUserWindow(HWND h) {
     return true;
 }
 
+// Windows' own processes: their flyouts, Start, search and folder windows are
+// never "the app you were using". The class list above misses some of them, and
+// Windows keeps adding more.
+bool IsShellApp(const std::wstring& exe) {
+    for (auto* shell : {L"explorer.exe", L"ShellExperienceHost.exe", L"StartMenuExperienceHost.exe", L"SearchHost.exe",
+                        L"SearchApp.exe", L"ShellHost.exe", L"TextInputHost.exe", L"LockApp.exe", L"candela.exe"})
+        if (!_wcsicmp(exe.c_str(), shell)) return true;
+    return false;
+}
+
+// Called on every foreground change, and every 2 seconds in case one was
+// missed. Overlays (mouse and GPU software, game launchers' toasts) take the
+// foreground for a moment without being apps: they're invisible, click-through or
+// tool windows, and are skipped so they can't replace the game.
+void RememberForeground(HWND fg) {
+    static std::wstring skipped;  // the log says each skip once, not on every check
+    if (!IsUserWindow(fg) || !IsWindowVisible(fg)) return;
+    LONG_PTR ex = GetWindowLongPtrW(fg, GWL_EXSTYLE);
+    wchar_t cls[64] = {};
+    GetClassNameW(fg, cls, 64);
+    std::wstring exe = ProcessExeName(fg);
+    const wchar_t* why = exe.empty()               ? L"its program can't be read"
+                         : IsShellApp(exe)          ? L"part of Windows"
+                         : (ex & WS_EX_TOOLWINDOW)  ? L"a tool window (an overlay?)"
+                         : (ex & WS_EX_TRANSPARENT) ? L"click-through (an overlay?)"
+                                                    : nullptr;
+    if (why) {
+        std::wstring key = exe + L"|" + cls;
+        if (key != skipped) {
+            skipped = key;
+            // Windows' own windows are skipped all the time: no need to say so.
+            if (exe.empty() || !IsShellApp(exe))
+                Log(L"Window in front not taken as the app you're using: %ls (%ls, window class %ls)", why,
+                    exe.empty() ? ProcessName(fg).c_str() : exe.c_str(), cls);
+        }
+        return;
+    }
+    skipped.clear();
+    if (exe == g_last_user_exe) return;
+    g_last_user_exe = exe;
+    Log(L"App in front: %ls (window class %ls)", exe.c_str(), cls);
+    settings::Refresh();  // the Games page's "+ Add" follows it while open
+}
+
 void CALLBACK OnWinEvent(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG, DWORD, DWORD) {
     // First the colors: this is the moment a game leaving fullscreen resets them.
     CheckAll();
@@ -868,7 +915,7 @@ void CALLBACK OnWinEvent(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG, DWORD, DW
     g_foreground = ProcessName(fg);
     if (event == EVENT_SYSTEM_FOREGROUND) {
         blackout::OnForeground(fg);
-        if (IsUserWindow(fg)) g_last_user_fg = fg;
+        RememberForeground(fg);
         g_fg_exclusive = ExclusiveFullscreenNow();
     }
 }
@@ -909,6 +956,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (wp == TIMER_GAMES) {
                 CheckGames();
+                RememberForeground(GetForegroundWindow());
                 return 0;
             }
             if (wp == TIMER_FADE) {
@@ -1058,7 +1106,7 @@ bool Init() {
             g_hooks.push_back(hook);
     WTSRegisterSessionNotification(g_main, NOTIFY_FOR_THIS_SESSION);
     g_status = CurrentStatus();
-    if (IsUserWindow(GetForegroundWindow())) g_last_user_fg = GetForegroundWindow();
+    RememberForeground(GetForegroundWindow());
     AddTrayIcon();
     CheckRegistry();
     Tick(Why::kForce);

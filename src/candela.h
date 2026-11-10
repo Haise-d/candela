@@ -119,7 +119,7 @@ bool AddGame(const std::wstring& exe); // false if already there
 std::wstring ProcessName(HWND hwnd);   // "chrome.exe", "pid 123" or "?" (for the log)
 std::wstring ProcessExeName(HWND hwnd);  // "chrome.exe", or "" if unknown
 std::wstring WindowTitle(HWND hwnd);
-HWND LastUserForeground();             // the last window you used that isn't Candela's or the shell
+std::wstring LastUserApp();            // the exe of the last app you used, not Candela, Windows or an overlay ("" if none yet)
 
 struct Color { float r, g, b, a; };
 inline Color Hex(uint32_t v, float a = 1.f) {
