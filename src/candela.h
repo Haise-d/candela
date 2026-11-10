@@ -58,6 +58,7 @@
 
 #define CANDELA_MUTEX L"Local\\CandelaSingleInstance"
 #define CANDELA_MAIN_CLASS L"CandelaMain"
+#define CANDELA_MINI_CLASS L"CandelaMiniMain"  // Candela mini's hidden window
 #define CANDELA_NAME L"Candela"               // message boxes
 #define CANDELA_VERSION L"1.1.0"
 

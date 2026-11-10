@@ -12,6 +12,7 @@ What's new in each version of Candela. Downloads are on the [releases page](http
 - Adding a running game to **Games → Anti-cheat games**, or taking it off the list, could crash Candela: the settings were rebuilt in the middle of the click.
 - A quick **Alt+Tab** did nothing while an always-on-top window was open (a pinned video, Task Manager kept on top): the switcher picked the window you were already in. It now steps from the window in front, and from the desktop it goes to the window you last used.
 - `candela.exe --dump` (developer screenshots) no longer replaces your settings file with its sample settings.
+- Candela no longer starts while Candela mini is running, as mini already did the other way round: the two would fight over the colors and the hotkeys. It says so and asks you to quit mini first.
 
 ## 1.1.0 — 2026-10-10
 

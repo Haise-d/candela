@@ -259,6 +259,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         Say(L"Candela isn't running.\n", L"Candela");
         return 1;
     }
+    // Candela mini sets the colors too: running both, they'd fight over the
+    // screen and the hotkeys (mini says the same about Candela).
+    if (FindWindowW(CANDELA_MINI_CLASS, nullptr) && dump_dir.empty()) {
+        MessageBoxW(nullptr,
+                    L"Candela mini is running. Quit it from its tray icon first: two programs changing the screen's colors fight "
+                    L"each other.\n\nCandela mini が実行中。先にトレイアイコンから終了すること。",
+                    CANDELA_NAME, MB_ICONINFORMATION);
+        return 1;
+    }
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (dump_dir.empty()) {
