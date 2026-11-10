@@ -2,7 +2,7 @@
 
 What's new in each version of Candela. Downloads are on the [releases page](https://github.com/Haise-d/candela/releases).
 
-## Unreleased
+## 1.1.1 — 2026-11-10
 
 ### Fixed
 
@@ -16,6 +16,12 @@ What's new in each version of Candela. Downloads are on the [releases page](http
 - With an admin window in front (Task Manager) and Candela not running as admin, Windows' own Alt+Tab opens, and a second Tab then opened Candela's switcher behind it, so neither worked. An Alt+Tab that Windows started now stays with Windows until Alt is let go. The same goes for one started over a game in exclusive fullscreen.
 - `candela.log` now says why a popup wasn't shown over a game (it is in the list, or Windows reports exclusive fullscreen), once per game.
 - **Games → Popups over games anyway** no longer promises popups over exclusive fullscreen: Candela tries, but Windows draws nothing on top of a game that really is in it.
+
+### Known issues
+
+- Far north (Tromsø, Reykjavik), a night start after midnight can land after the next sunrise, and night colors then stay on through the day. On days with no sunrise or sunset, Candela uses 07:00 and 19:00.
+- Balatro gets no popups in its own fullscreen and borderless modes: Windows reports both as exclusive fullscreen. Windowed, made borderless by Candela (Ctrl+Alt+B), works.
+- A game that runs as admin (Black Desert) hides the keyboard from Candela unless Candela runs as admin too. **Start with Windows** starts it that way when candela.exe is in a folder only admins can change, such as Program Files.
 
 ## 1.1.0 — 2026-10-10
 

@@ -197,7 +197,7 @@ sudo apt install g++-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64   # Ubuntu
 CXX=x86_64-w64-mingw32-g++-posix ./build.sh                             # writes out/candela.exe
 ```
 
-`build.sh` also runs the logic tests in `tests/` when a native `g++` is available. Every push is built by GitHub Actions, and publishing a release attaches `Candela-<version>.zip` to it; the release tag must match `CANDELA_VERSION` in `src/candela.h` (tag `v1.1.0` for 1.1.0).
+`build.sh` also runs the logic tests in `tests/` when a native `g++` is available. Every push is built by GitHub Actions, and publishing a release attaches `Candela-<version>.zip` to it; the release tag must match `CANDELA_VERSION` in `src/candela.h` (tag `v1.1.1` for 1.1.1).
 
 | Folder | Contents |
 |---|---|
