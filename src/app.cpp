@@ -484,9 +484,31 @@ bool ExclusiveFullscreenNow() {
     return SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_RUNNING_D3D_FULL_SCREEN;
 }
 
-bool GameInFront() {
-    // Exclusive fullscreen: anything drawn on top can knock the game out of it.
-    if (ExclusiveFullscreenNow()) return true;
+// Whether popups stay hidden right now. The log says why, once for each app
+// and reason: "it never shows over this game" is otherwise a guess between
+// the list, what Windows reports about the game, and Windows not drawing it.
+bool PopupsHeldBack() {
+    QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
+    if (FAILED(SHQueryUserNotificationState(&state))) state = QUNS_ACCEPTS_NOTIFICATIONS;
+    const bool exclusive = state == QUNS_RUNNING_D3D_FULL_SCREEN;
     HWND fg = GetForegroundWindow();
-    return fg && IsGame(ProcessExeName(fg));
+    std::wstring exe = fg ? ProcessExeName(fg) : L"";
+    const bool listed = IsGame(exe);
+    const bool held = !g_cfg.popup_in_games && (exclusive || listed);
+    if (exclusive || listed || state == QUNS_BUSY) {
+        static std::wstring said;
+        std::wstring key = exe + L"|" + std::to_wstring((int)state) + (listed ? L"L" : L"") + (held ? L"H" : L"");
+        if (key != said) {
+            said = key;
+            const wchar_t* app = exe.empty() ? L"the app in front" : exe.c_str();
+            const wchar_t* how = exclusive ? L"Windows reports exclusive fullscreen" : state == QUNS_BUSY ? L"a fullscreen window, not exclusive" : L"not fullscreen";
+            if (held)
+                Log(L"Popup not shown over %ls: %ls (%ls)", app, listed ? L"it is in the No popups list" : L"exclusive fullscreen", how);
+            else if (exclusive)
+                Log(L"Popup shown over %ls, but %ls: Windows may not draw it", app, how);
+            else
+                Log(L"Popup shown over %ls (%ls%ls)", app, how, listed ? L"; in the No popups list, with Popups over games anyway on" : L"");
+        }
+    }
+    return held;
 }

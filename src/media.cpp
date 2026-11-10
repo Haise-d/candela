@@ -510,7 +510,7 @@ void Volume(UINT vk) {
         }
     }
     vol->Release();
-    if (vk && !g_cfg.popup_in_games && GameInFront()) return;
+    if (vk && PopupsHeldBack()) return;
     ShowVolume(pct, muted != FALSE, name);
 }
 
@@ -1202,7 +1202,7 @@ void OnKey(UINT vk) {
                       : vk == VK_MEDIA_STOP       ? Worker::kStop
                                                   : Worker::kToggle;
     g_worker.Post(cmd, vk);
-    if (!g_cfg.popup_in_games && GameInFront()) return;
+    if (PopupsHeldBack()) return;
     // Show straight away with what we knew; the real state scrambles in a
     // moment later when the app answers.
     Content c = g_last_media;
@@ -1259,7 +1259,7 @@ void OnInfo(LPARAM lp) {
     if (fresh) {
         // A new song by itself: the card opens if it's from one of the apps
         // in the list, unless it was turned off meanwhile or a game is in front.
-        if (NewSongWanted() && SongAppAllowed(aumid) && (g_cfg.popup_in_games || !GameInFront())) {
+        if (NewSongWanted() && SongAppAllowed(aumid) && !PopupsHeldBack()) {
             ShowCard(c, 3500);
             g_owner = kOwnerSong;
         } else if (g_owner == kOwnerSong) {
@@ -1289,7 +1289,7 @@ void OnVolume(WPARAM what) {
     // Shown whenever the volume keys would show it: the popup is on, Candela
     // isn't paused or stepping aside for an anti-cheat game, no game in front.
     if (!g_cfg.media_popup || engine::Paused() || !engine::SteppingAsideFor().empty()) return;
-    if (!g_cfg.popup_in_games && GameInFront()) return;
+    if (PopupsHeldBack()) return;
     ShowVolume((int)std::lround(g_seen_level * 100), g_seen_muted, g_device_name);  // the name Watch() read
 }
 

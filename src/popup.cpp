@@ -266,7 +266,7 @@ bool Init() {
 void Show(const Content& c) {
     // Over a game, anything drawn on top can cost a frame or knock it out of
     // exclusive fullscreen. The change itself still happens.
-    if (!g_cfg.popup_in_games && GameInFront()) return;
+    if (PopupsHeldBack()) return;
     if (core::MediaCorner(g_cfg) == g_cfg.popup_position) media::Hide();  // same corner: one at a time
     g_glitchy.Show(c);
 }

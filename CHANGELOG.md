@@ -14,6 +14,8 @@ What's new in each version of Candela. Downloads are on the [releases page](http
 - `candela.exe --dump` (developer screenshots) no longer replaces your settings file with its sample settings.
 - Candela no longer starts while Candela mini is running, as mini already did the other way round: the two would fight over the colors and the hotkeys. It says so and asks you to quit mini first.
 - With an admin window in front (Task Manager) and Candela not running as admin, Windows' own Alt+Tab opens, and a second Tab then opened Candela's switcher behind it, so neither worked. An Alt+Tab that Windows started now stays with Windows until Alt is let go. The same goes for one started over a game in exclusive fullscreen.
+- `candela.log` now says why a popup wasn't shown over a game (it is in the list, or Windows reports exclusive fullscreen), once per game.
+- **Games → Popups over games anyway** no longer promises popups over exclusive fullscreen: Candela tries, but Windows draws nothing on top of a game that really is in it.
 
 ## 1.1.0 — 2026-10-10
 

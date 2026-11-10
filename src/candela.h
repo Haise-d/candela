@@ -115,7 +115,7 @@ HMONITOR MonitorByDevice(const std::wstring& device);  // nullptr if it isn't co
 MONITORINFO MonitorInfoOf(HMONITOR mon);  // never left empty: the primary screen's size if Windows can't say
 extern std::atomic<bool> g_fg_exclusive;  // the window in front is in exclusive fullscreen (read by the hook)
 bool ExclusiveFullscreenNow();
-bool GameInFront();                    // a game from the list, or anything in exclusive fullscreen, is in front
+bool PopupsHeldBack();                 // popups stay hidden now (a listed game or exclusive fullscreen in front); logs why
 bool IsGame(const std::wstring& exe);  // in g_cfg.games
 bool AddGame(const std::wstring& exe); // false if already there
 std::wstring ProcessName(HWND hwnd);   // "chrome.exe", "pid 123" or "?" (for the log)

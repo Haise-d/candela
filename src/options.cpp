@@ -734,8 +734,10 @@ std::vector<Section> Build() {
                               L"警告：ゲーム上への描画はフレーム落ちやフルスクリーン解除の原因となる。"),
                            &core::Config::games));
     gm.opts.push_back(Toggle(L"ingames", Tr(L"Popups over games anyway", L"ゲーム中も通知を表示"),
-                             Tr(L"On: popups show over the games above and exclusive fullscreen too.",
-                                L"報告：ON時、上記のゲームや排他的フルスクリーン上にも通知を表示。"),
+                             Tr(L"On: popups show over the games above too. Over exclusive fullscreen Candela then tries as well, but "
+                                L"Windows draws nothing on top of a game that really is in it: use the game's borderless mode.",
+                                L"報告：ON時、上記のゲーム上にも通知を表示。排他的フルスクリーンでも表示を試みるが、"
+                                L"真の排他的フルスクリーンではWindowsが描画しない。推奨：ゲーム側のボーダーレスモード。"),
                              &c.popup_in_games));
     gm.opts.push_back(Toggle(L"release", Tr(L"Let go for anti-cheat", L"アンチチート対策の待機"),
                              Tr(L"While a game from the next list is running, even minimized to the tray, Candela stops watching "
