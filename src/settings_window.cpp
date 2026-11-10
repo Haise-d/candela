@@ -1088,7 +1088,9 @@ private:
         Changed(key, before);
     }
 
-    void Changed(const std::wstring& key, const std::wstring& before) {
+    // `key` is a copy on purpose: callers hand over a setting's own key, and
+    // Rebuild() replaces every setting, which would leave a reference dangling.
+    void Changed(std::wstring key, const std::wstring& before) {
         Rebuild();
         double now = NowMs();
         const opts::Option* o = Find(key);
@@ -1129,17 +1131,20 @@ private:
                 t_preview_ = now;
                 Render(now);
                 break;
+            // Both copy what they need first: adding or removing an anti-cheat
+            // game that is running makes Candela let go of (or take back) the
+            // keyboard at once, which rebuilds the settings under Sel().
             case kRemove: {
-                const opts::Option& o = Sel();
-                opts::ListRemove(o, (size_t)h.a);
-                Changed(o.key, Upper(o.value()));
+                std::wstring key = Sel().key;
+                opts::ListRemove(Sel(), (size_t)h.a);
+                const opts::Option* o = Find(key);
+                Changed(key, o ? Upper(o->value()) : L"");
                 break;
             }
             case kAdd: {
-                const opts::Option& o = Sel();
-                std::wstring before = Upper(o.value());
-                opts::ListAdd(o, front_);
-                Changed(o.key, before);
+                std::wstring key = Sel().key, before = Upper(Sel().value()), exe = front_;
+                opts::ListAdd(Sel(), exe);
+                Changed(key, before);
                 break;
             }
             case kStrip:
